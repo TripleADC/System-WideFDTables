@@ -13,6 +13,7 @@
 #include <string.h>
 #include <pwd.h>
 #include <ctype.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -33,7 +34,7 @@ typedef struct processInfo_struct
     int PID;
 
     // Will contain a linked list of FD's that the process has
-    struct FDInfo_struct *FD_list;
+    struct FDInfo_struct *FDlist;
 
     // Will be a linked list of PID's
     struct processInfo_struct *next;
@@ -66,20 +67,20 @@ processNode *createProcessNode(int PID)
     if(new_node == NULL) return NULL;
 
     new_node->PID = PID;
-    new_node->FD_list = NULL;
+    new_node->FDlist = NULL;
     new_node->next = NULL;
 
     return new_node;
 }
 
-processNode *createFDNode(int FD, char name[STR_LEN])
+FDNode *createFDNode(int FD, char filename[STR_LEN])
 {
-    processNode *new_node = (FDNode *)calloc(1, sizeof(FDNode));
+    FDNode *new_node = (FDNode *)calloc(1, sizeof(FDNode));
 
     if(new_node == NULL) return NULL;
 
     new_node->FD = FD;
-    strcpy(new_node->name, name);
+    strcpy(new_node->filename, filename);
     new_node->next = NULL;
 
     return new_node;
@@ -92,7 +93,7 @@ processNode *insertProcessList(processNode *root, int PID)
     processNode *new_node = createProcessNode(PID);
 
     // If root is NULL, then the new_node is the start of the list
-    if((root == NULL) || (PID < root->PID)) 
+    if((root == NULL)) 
     {
         return new_node;
     }
@@ -109,14 +110,14 @@ processNode *insertProcessList(processNode *root, int PID)
     return root;
 }
 
-FDNode *insertFDList(FDNode *root, int FD, char name[STR_LEN])
+FDNode *insertFDList(FDNode *root, int FD, char filename[STR_LEN])
 {
     // Inserting depending on the PID
     FDNode *traverser = root;
-    FDNode *new_node = createFDNode(FD, name);
+    FDNode *new_node = createFDNode(FD, filename);
 
     // If root is NULL, then the new_node is the start of the list
-    if((root == NULL) || (FD < root->FD)) 
+    if((root == NULL)) 
     {
         return new_node;
     }
@@ -181,7 +182,8 @@ FDNode *printFDList(FDNode *root)
 
     while(traverser != NULL)
     {
-        printf("%d\n", traverser->FD);
+        printf("FD: %d ", traverser->FD);
+        printf("%s\n", traverser->filename);
 
         traverser = traverser->next;
     }
@@ -190,49 +192,58 @@ FDNode *printFDList(FDNode *root)
 /*
     MAIN FUNCTIONS
 */
-void getFD(char *path)
+FDNode *getFD(int PID)
 {   
-    char path2[100] = "";
-    strcpy(path2, path);
-    strcat(path2, "/");
-    printf("%s\n", path2);
+    // PID list
+    FDNode *root = NULL;
 
+    char PIDstr[25];
     char filename[STR_LEN];
+    char path[STR_LEN] = "/proc/";
 
+    snprintf(PIDstr, sizeof(PIDstr), "%d", PID);
+
+    // Making path into the format: /proc/[PID]/fd/
+    strcat(path, PIDstr);
+    strcat(path, "/fd/");
+    printf("%s\n", path);
+    
     // Opening and traversing proc file
     DIR *procDir = opendir(path);
-    struct dirent *currEntry = readdir(procDir);
-    struct stat currInfo;
 
-    while(currEntry != NULL)
+    if(procDir != NULL)
     {
-        // Updating path
-        if(isNumber(currEntry->d_name) == 1)
+        struct dirent *currEntry = readdir(procDir);
+
+        while(currEntry != NULL)
         {
             // Updating path
-            strcat(path2, currEntry->d_name);
-            lstat(path2, &currInfo);
+            if(isNumber(currEntry->d_name) == 1 && access(path, R_OK) == 0)
+            {
+                // Updating paths, filenames, etc.
+                strcat(path, currEntry->d_name);
+                readlink(path, filename, STR_LEN);
 
-            readlink(path2, filename, STR_LEN);
+                // Inserting into list
+                root = insertFDList(root, atoi(currEntry->d_name), filename);
 
-            printf("FD: %s", currEntry->d_name);
-            printf("| Inode: %ld", currInfo.st_ino);
-            printf("| Filename: %s\n", filename);
-
-            strncpy(filename, "", sizeof(filename));
-            strcpy(path2, path);
-            strcat(path2, "/");
-        } 
-        
-        currEntry = readdir(procDir);
+                // Resetting strings for next entry
+                strncpy(filename, "", sizeof(filename));
+                strcpy(path, "/proc/");
+                strcat(path, PIDstr);
+                strcat(path, "/fd/");
+            } 
+            
+            currEntry = readdir(procDir);
+        }
     }
 
     closedir(procDir);
+    return root;
 }
 
 processNode *getPID()
 {
-
     // PID list
     processNode *root = NULL;
 
@@ -241,7 +252,7 @@ processNode *getPID()
     struct dirent *currEntry = readdir(procDir);
     struct stat currInfo;
 
-    char path[100] = "/proc/";
+    char path[STR_LEN] = "/proc/";
 
     // Since we only want processes owned by the current user
     char *username = getlogin();
@@ -263,16 +274,9 @@ processNode *getPID()
             {
                 printf("%s\n", currEntry->d_name);
                 root = insertProcessList(root, atoi(currEntry->d_name));
-
-                strcat(path, "/fd");
-                
-                // if(access(path, R_OK) == 0)
-                // {
-                //     getFD(path);
-                // }
             }
 
-            strcpy(path, "/proc/");
+            strncpy(path, "/proc/", sizeof(path));
         }
         
         currEntry = readdir(procDir);
@@ -300,9 +304,30 @@ void printToScreen(processNode *root)
 int main()
 {
     processNode *root = getPID();
+    processNode *traverser = root->next;
 
-    printf("List:\n");
-    printToScreen(root);
+    char path[STR_LEN] = "/proc/";
+    char PIDstr[25];
 
+    // TO-DO: can be moved into its own function populateFD()
+    while(traverser != NULL)
+    {
+        snprintf(PIDstr, sizeof(PIDstr), "%d", traverser->PID);
+        strcat(path, PIDstr);
+
+        if(access(path, R_OK) == 0)
+        {
+            traverser->FDlist = getFD(traverser->PID);
+            printFDList(traverser->FDlist);
+        }
+
+        printf("PID: %d\n", traverser->PID);
+       
+        // Resetting path
+        strncpy(path, "/proc/", sizeof(path));
+        
+        traverser = traverser->next;
+    }
+    
     return 0;
 }
