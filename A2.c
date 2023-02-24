@@ -134,12 +134,12 @@ FDNode *insertFDList(FDNode *root, int FD, char filename[STR_LEN])
     return root;
 }
 
-processNode *deleteProcessList(processNode *root)
+FDNode *deleteFDList(FDNode *root)
 {
-    processNode *traverser = root;
-    processNode *q = NULL;
+    FDNode *traverser = root;
+    FDNode *q = NULL;
 
-    while(traverser->next != NULL)
+    while(traverser != NULL)
     {
         q = traverser->next;
         free(traverser);
@@ -149,13 +149,14 @@ processNode *deleteProcessList(processNode *root)
     return NULL;
 }
 
-FDNode *deleteFDList(FDNode *root)
+processNode *deleteProcessList(processNode *root)
 {
-    FDNode *traverser = root;
-    FDNode *q = NULL;
+    processNode *traverser = root;
+    processNode *q = NULL;
 
-    while(traverser->next != NULL)
+    while(traverser != NULL)
     {
+        deleteFDList(traverser->FDlist);
         q = traverser->next;
         free(traverser);
         traverser = q;
@@ -206,7 +207,6 @@ FDNode *getFD(int PID)
     // Making path into the format: /proc/[PID]/fd/
     strcat(path, PIDstr);
     strcat(path, "/fd/");
-    printf("%s\n", path);
     
     // Opening and traversing proc file
     DIR *procDir = opendir(path);
@@ -257,7 +257,6 @@ processNode *getPID()
     // Since we only want processes owned by the current user
     char *username = getlogin();
     struct passwd *user = getpwnam(username);
-    printf("%s %d\n", user->pw_name, user->pw_uid);
 
     while(currEntry != NULL)
     {
@@ -272,7 +271,6 @@ processNode *getPID()
             // Only want if the user owns the process
             if(currInfo.st_uid == user->pw_uid)
             {
-                printf("%s\n", currEntry->d_name);
                 root = insertProcessList(root, atoi(currEntry->d_name));
             }
 
@@ -286,26 +284,9 @@ processNode *getPID()
     return root;
 }
 
-// Per-process table => Prints PID, FD
-
-// System-wide table => Prints PID, FD, Filename
-
-// VNode table => Prints inodes
-
-// Composite/default => Prints PID, FD, Filename, Inode
-
-// Prints to screen depending on flag
-void printToScreen(processNode *root)
+void populateFD(processNode *root)
 {
-    printProcessList(root);
-}
-
-// Processes flags
-int main()
-{
-    processNode *root = getPID();
-    processNode *traverser = root->next;
-
+    processNode *traverser = root;
     char path[STR_LEN] = "/proc/";
     char PIDstr[25];
 
@@ -318,16 +299,242 @@ int main()
         if(access(path, R_OK) == 0)
         {
             traverser->FDlist = getFD(traverser->PID);
-            printFDList(traverser->FDlist);
         }
-
-        printf("PID: %d\n", traverser->PID);
        
         // Resetting path
         strncpy(path, "/proc/", sizeof(path));
         
         traverser = traverser->next;
     }
+}
+
+// Per-process table => Prints PID, FD
+void printPerProcess(processNode *root, int hasPositional, int argPID)
+{
+    processNode *processTraverser = root;
+    FDNode *FDTraverser = NULL;
+    int i = 0;
+
+    printf("\t PID \t\t FD\n");
+    printf("=============================================\n");
+    while(processTraverser != NULL)
+    {
+        FDTraverser = processTraverser->FDlist;
+
+        if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
+        {
+            if(FDTraverser == NULL)
+            {
+                printf("%d \t %d \t N/A\n", i, processTraverser->PID);
+                i++;
+            }
+            else
+            {
+                while(FDTraverser != NULL)
+                {
+                    printf("%d \t %d \t %d\n", i, processTraverser->PID, FDTraverser->FD);
+                    FDTraverser = FDTraverser->next;
+                    i++;
+                }
+            }
+        }
+        
+        processTraverser = processTraverser->next;
+        i++;
+    }
+}
+
+// System-wide table => Prints PID, FD, Filename
+void printSystemWide(processNode *root, int hasPositional, int argPID)
+{
+    processNode *processTraverser = root;
+    FDNode *FDTraverser = NULL;
+    int i = 0;
+
+    printf("\t PID \t FD \t File name\n");
+    printf("=============================================\n");
+    while(processTraverser != NULL)
+    {
+        FDTraverser = processTraverser->FDlist;
+
+        if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
+        {
+            if(FDTraverser == NULL)
+            {
+                printf("%d \t %d  N/A \t N/A\n", i, processTraverser->PID);
+                i++;
+            }
+            else
+            {
+                while(FDTraverser != NULL)
+                {
+                    printf("%d \t %d  %d \t %s\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename);
+                    FDTraverser = FDTraverser->next;
+                    i++;
+                }
+            }
+        }
+        
+        processTraverser = processTraverser->next;
+        i++;
+    }
+}
+
+void printThresholdList(processNode *root, int thresholdNum)
+{
+    processNode *processTraverser = root;
+    FDNode *FDTraverser = NULL;
+
+    while(processTraverser != NULL)
+    {
+        FDTraverser = processTraverser->FDlist;
+        while(FDTraverser != NULL)
+        {
+            if(FDTraverser->FD > thresholdNum)
+            {
+                printf("%d (%d),\n", processTraverser->PID, FDTraverser->FD);
+            }
+            
+            FDTraverser = FDTraverser->next;
+        }
+
+        processTraverser = processTraverser->next;
+    }
+}
+
+// VNode table => Prints inodes
+
+// Composite/default => Prints PID, FD, Filename, Inode
+
+// Prints to screen depending on flag
+void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystemWide, int canPrintVNodes, int canPrintComposite, int hasThreshold, int thresholdNum, int hasPositional, int argPID)
+{
+    if(canPrintPerProcess)
+    {
+        printPerProcess(root, hasPositional, argPID);
+        printf("\n\n");
+    }
     
+    if(canPrintSystemWide)
+    {
+        printSystemWide(root, hasPositional, argPID);
+        printf("\n\n");
+    }
+
+    if(hasThreshold)
+    {
+        printf("\n ### Offending Processes ###\n");
+        printThresholdList(root, thresholdNum);
+    }
+}
+
+// Processes flags
+int main(int argc, char **argv)
+{
+    // Flags and errors
+    int canPrintPerProcess = 0;
+    int canPrintSystemWide = 0;
+    int canPrintVNodes = 0;
+    int canPrintComposite = 0;
+
+    int hasThreshold = 0;
+    int thresholdNum = 0;
+
+    int hasPositional = 0;
+    int argPID = -1;
+
+    int numOfNumberArgs = 0;
+    int produceError = 0;
+
+    char errMsg[100] = "";
+    char strNum[10] = "";
+
+    // Getting all information
+    processNode *root = getPID();
+    processNode *traverser = root;
+    populateFD(root);
+    
+    if(argc == 1)
+    {
+        // By default, prints composite table
+        printToScreen(root, 0, 1, 0, 0, 0, -1, 0, -1);
+    }
+    else
+    {
+        for(int i = 1; i < argc; i++)
+        {
+            // Checking if its the number
+            if(isNumber(argv[i]) == 0)
+            {
+                if(strcmp(argv[i], "--per-process") == 0)
+                {
+                    canPrintPerProcess = 1;
+                }
+                else if(strcmp(argv[i], "--systemWide") == 0)
+                {
+                    canPrintSystemWide = 1;
+                }
+                else if(strcmp(argv[i], "--VNodes") == 0)
+                {
+                    canPrintVNodes = 1;
+                }
+                else if(strcmp(argv[i], "--composite") == 0)
+                {
+                    canPrintVNodes = 1;
+                }
+                else if(strncmp(argv[i], "--threshold=", 12) == 0)
+                {
+                    // Copies the string after --samples=
+                    // Assumes it is 10 digits or less
+                    strncpy(strNum, argv[i]+12, 10);
+
+                    // If the string after --samples= is a number, then set samples to it
+                    if(isNumber(strNum) == 1)
+                    {
+                        thresholdNum = atoi(strNum);
+                        hasThreshold = 1;
+                    }
+                    else
+                    {
+                        produceError = 1;
+                        strcpy(errMsg, " : A number that is 10 digits or less must follow --threshold=");
+                        break;
+                    }
+                }
+                // Checking if valid flag
+                else
+                {
+                    produceError = 1;
+                    break;
+                }
+            }
+            else
+            {
+               numOfNumberArgs++;
+
+               if(numOfNumberArgs > 1)
+               {
+                    strcpy(errMsg, " : Can only have one particular PID as a positional argument");
+                    produceError = 1;
+                    break;
+               }
+
+               argPID = atoi(argv[i]);
+               hasPositional = 1;
+            }
+        }
+
+        if(produceError == 0)
+        {
+            printToScreen(root, canPrintPerProcess, canPrintSystemWide, canPrintVNodes, canPrintComposite, hasThreshold, thresholdNum, hasPositional, argPID);
+        }
+        else
+        {
+            printf("Invalid flag%s\n", errMsg);
+        }
+    }
+
+    deleteProcessList(root);
+
     return 0;
 }
