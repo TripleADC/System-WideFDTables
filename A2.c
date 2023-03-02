@@ -13,7 +13,6 @@
 #include <string.h>
 #include <pwd.h>
 #include <ctype.h>
-#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -74,7 +73,7 @@ processNode *createProcessNode(int PID)
     return new_node;
 }
 
-FDNode *createFDNode(int FD, char filename[STR_LEN], int inode)
+FDNode *createFDNode(int FD, char filename[STR_LEN], long inode)
 {
     FDNode *new_node = (FDNode *)calloc(1, sizeof(FDNode));
 
@@ -195,48 +194,48 @@ processNode *deleteProcessList(processNode *root)
 /*
     MAIN FUNCTIONS
 */
-int getInodeNumber(int PID, int FD)
-{
-    char PIDstr[25];
-    char FDstr[25];
-    char filename[STR_LEN];
-    char path[STR_LEN] = "/proc/";
+// int getInodeNumber(int PID, int FD)
+// {
+//     char PIDstr[25];
+//     char FDstr[25];
+//     char filename[STR_LEN];
+//     char path[STR_LEN] = "/proc/";
 
-    char inodeStr[25] = "";
-    char traverserStr[STR_LEN] = "";
-    char *substr;
+//     char inodeStr[25] = "";
+//     char traverserStr[STR_LEN] = "";
+//     char *substr;
     
-    snprintf(PIDstr, sizeof(PIDstr), "%d", PID);
-    snprintf(FDstr, sizeof(FDstr), "%d", FD);
+//     snprintf(PIDstr, sizeof(PIDstr), "%d", PID);
+//     snprintf(FDstr, sizeof(FDstr), "%d", FD);
 
-    // Making path into the format: /proc/[PID]/fdinfo/
-    strcat(path, PIDstr);
-    strcat(path, "/fdinfo/");
-    strcat(path, FDstr);
+//     // Making path into the format: /proc/[PID]/fdinfo/
+//     strcat(path, PIDstr);
+//     strcat(path, "/fdinfo/");
+//     strcat(path, FDstr);
 
-    FILE *fdinfo_file = fopen(path, "r");
+//     FILE *fdinfo_file = fopen(path, "r");
 
-    if(fdinfo_file != NULL)
-    {
-        while(fscanf(fdinfo_file, "%s", traverserStr) != EOF)
-        {
-            substr = strstr(traverserStr, "ino:");
-            if(substr != NULL)
-            {
-                fscanf(fdinfo_file, "%s", inodeStr);
-                break;
-            }
-        }
-    }
+//     if(fdinfo_file != NULL)
+//     {
+//         while(fscanf(fdinfo_file, "%s", traverserStr) != EOF)
+//         {
+//             substr = strstr(traverserStr, "ino:");
+//             if(substr != NULL)
+//             {
+//                 fscanf(fdinfo_file, "%s", inodeStr);
+//                 break;
+//             }
+//         }
+//     }
 
-    // if(strcmp(inodeStr, "") == 0)
-    // {
-    //     printf("PID: %d, FD: %d, has no inode in fdinfo\n", PID, FD);
-    // }
+//     // if(strcmp(inodeStr, "") == 0)
+//     // {
+//     //     printf("PID: %d, FD: %d, has no inode in fdinfo\n", PID, FD);
+//     // }
 
-    fclose(fdinfo_file);
-    return strtol(inodeStr, NULL, 10);
-}
+//     fclose(fdinfo_file);
+//     return strtol(inodeStr, NULL, 10);
+// }
 
 FDNode *getFD(int PID)
 {   
@@ -246,7 +245,7 @@ FDNode *getFD(int PID)
     char PIDstr[25];
     char filename[STR_LEN];
     char path[STR_LEN] = "/proc/";
-    int inode = -1;
+    struct stat currInfo;
 
     snprintf(PIDstr, sizeof(PIDstr), "%d", PID);
 
@@ -269,10 +268,10 @@ FDNode *getFD(int PID)
                 // Updating paths, filenames, etc.
                 strcat(path, currEntry->d_name);
                 readlink(path, filename, STR_LEN);
-                inode = getInodeNumber(PID, atoi(currEntry->d_name));
+                stat(path, &currInfo);
 
                 // Inserting into list
-                root = insertFDList(root, atoi(currEntry->d_name), filename, inode);
+                root = insertFDList(root, atoi(currEntry->d_name), filename, currInfo.st_ino);
 
                 // Resetting strings for next entry
                 strncpy(filename, "", sizeof(filename));
@@ -370,19 +369,11 @@ void printPerProcess(processNode *root, int hasPositional, int argPID)
 
         if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
         {
-            if(FDTraverser == NULL)
+            while(FDTraverser != NULL)
             {
-                printf("%d \t %d \t N/A\n", i, processTraverser->PID);
+                printf("%d \t %d \t %d\n", i, processTraverser->PID, FDTraverser->FD);
+                FDTraverser = FDTraverser->next;
                 i++;
-            }
-            else
-            {
-                while(FDTraverser != NULL)
-                {
-                    printf("%d \t %d \t %d\n", i, processTraverser->PID, FDTraverser->FD);
-                    FDTraverser = FDTraverser->next;
-                    i++;
-                }
             }
         }
         
@@ -406,19 +397,11 @@ void printSystemWide(processNode *root, int hasPositional, int argPID)
 
         if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
         {
-            if(FDTraverser == NULL)
+            while(FDTraverser != NULL)
             {
-                printf("%d \t %d  N/A \t N/A\n", i, processTraverser->PID);
+                printf("%d \t %d  %d \t %s\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename);
+                FDTraverser = FDTraverser->next;
                 i++;
-            }
-            else
-            {
-                while(FDTraverser != NULL)
-                {
-                    printf("%d \t %d  %d \t %s\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename);
-                    FDTraverser = FDTraverser->next;
-                    i++;
-                }
             }
         }
         
@@ -434,7 +417,7 @@ void printVNodes(processNode *root, int hasPositional, int argPID)
     FDNode *FDTraverser = NULL;
     int i = 0;
 
-    printf("\t FD \t\t\t Inode\n");
+    printf("\t FD \t Inode\n");
     printf("=============================================\n");
     while(processTraverser != NULL)
     {
@@ -442,19 +425,11 @@ void printVNodes(processNode *root, int hasPositional, int argPID)
 
         if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
         {
-            if(FDTraverser == NULL)
+            while(FDTraverser != NULL)
             {
-                printf("%d \t %d \t N/A\n", i, processTraverser->PID);
+                printf("%d \t %d \t %ld\n", i, FDTraverser->FD, FDTraverser->inode);
+                FDTraverser = FDTraverser->next;
                 i++;
-            }
-            else
-            {
-                while(FDTraverser != NULL)
-                {
-                    printf("%d \t %d \t %ld\n", i, FDTraverser->FD, FDTraverser->inode);
-                    FDTraverser = FDTraverser->next;
-                    i++;
-                }
             }
         }
         
@@ -478,19 +453,11 @@ void printComposite(processNode *root, int hasPositional, int argPID)
 
         if((hasPositional == 0) || (hasPositional && argPID == processTraverser->PID))
         {
-            if(FDTraverser == NULL)
+            while(FDTraverser != NULL)
             {
-                printf("%d \t %d  N/A \t N/A\n", i, processTraverser->PID);
+                printf("%d \t %d  %d \t %s \t %ld\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename, FDTraverser->inode);
+                FDTraverser = FDTraverser->next;
                 i++;
-            }
-            else
-            {
-                while(FDTraverser != NULL)
-                {
-                    printf("%d \t %d  %d \t %s \t %ld\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename, FDTraverser->inode);
-                    FDTraverser = FDTraverser->next;
-                    i++;
-                }
             }
         }
         
@@ -499,7 +466,7 @@ void printComposite(processNode *root, int hasPositional, int argPID)
     }
 }
 
-void printThresholdList(processNode *root, int thresholdNum)
+void printThresholdList(processNode *root, int thresholdNum, int hasPositional, int argPID)
 {
     processNode *processTraverser = root;
     FDNode *FDTraverser = NULL;
@@ -509,7 +476,7 @@ void printThresholdList(processNode *root, int thresholdNum)
         FDTraverser = processTraverser->FDlist;
         while(FDTraverser != NULL)
         {
-            if(FDTraverser->FD > thresholdNum)
+            if((hasPositional == 0 && FDTraverser->FD > thresholdNum) || (hasPositional && argPID == processTraverser->PID && FDTraverser->FD > thresholdNum))
             {
                 printf("%d (%d),\n", processTraverser->PID, FDTraverser->FD);
             }
@@ -553,9 +520,8 @@ void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystem
     if(hasThreshold)
     {
         printf("\n ### Offending Processes ###\n");
-        printThresholdList(root, thresholdNum);
+        printThresholdList(root, thresholdNum, hasPositional, argPID);
     }
-
 }
 
 // Processes flags
@@ -566,6 +532,9 @@ int main(int argc, char **argv)
     int canPrintSystemWide = 0;
     int canPrintVNodes = 0;
     int canPrintComposite = 1;
+
+    int readOthers = 0;
+    int readComposite = 0;
 
     int hasThreshold = 0;
     int thresholdNum = 0;
@@ -581,7 +550,6 @@ int main(int argc, char **argv)
 
     // Getting all information
     processNode *root = getPID();
-    processNode *traverser = root;
     populateFD(root);
     
     if(argc == 1)
@@ -596,22 +564,25 @@ int main(int argc, char **argv)
             // Checking if its the number
             if(isNumber(argv[i]) == 0)
             {
-                canPrintComposite = 0;
                 if(strcmp(argv[i], "--per-process") == 0)
                 {
                     canPrintPerProcess = 1;
+                    readOthers = 1;
                 }
                 else if(strcmp(argv[i], "--systemWide") == 0)
                 {
                     canPrintSystemWide = 1;
+                    readOthers = 1;
                 }
                 else if(strcmp(argv[i], "--VNodes") == 0)
                 {
                     canPrintVNodes = 1;
+                    readOthers = 1;
                 }
                 else if(strcmp(argv[i], "--composite") == 0)
                 {
                     canPrintComposite = 1;
+                    readComposite = 1;
                 }
                 else if(strncmp(argv[i], "--threshold=", 12) == 0)
                 {
@@ -657,6 +628,11 @@ int main(int argc, char **argv)
 
         if(produceError == 0)
         {
+            if(readOthers == 1 && readComposite == 0)
+            {
+                canPrintComposite = 0;
+            }
+
             printToScreen(root, canPrintPerProcess, canPrintSystemWide, canPrintVNodes, canPrintComposite, hasThreshold, thresholdNum, hasPositional, argPID);
         }
         else
