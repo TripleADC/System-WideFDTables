@@ -1,3 +1,4 @@
+
 /*
     Assignment 2 : Recreating the System-Wide FD Tables
 
@@ -16,29 +17,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define STR_LEN 1024
-
-// Need a CDT
-typedef struct FDInfo_struct
-{
-    int FD;
-    char filename[STR_LEN];
-    long inode;
-
-    // Will be a linked list of FD's
-    struct FDInfo_struct *next; 
-} FDNode;
-
-typedef struct processInfo_struct
-{
-    int PID;
-
-    // Will contain a linked list of FD's that the process has
-    struct FDInfo_struct *FDlist;
-
-    // Will be a linked list of PID's
-    struct processInfo_struct *next;
-} processNode;
+// Header file
+#include "A2.h"
 
 /*
     HELPER FUNCTIONS
@@ -191,9 +171,6 @@ processNode *deleteProcessList(processNode *root)
 //     }
 // }
 
-/*
-    MAIN FUNCTIONS
-*/
 // int getInodeNumber(int PID, int FD)
 // {
 //     char PIDstr[25];
@@ -236,6 +213,10 @@ processNode *deleteProcessList(processNode *root)
 //     fclose(fdinfo_file);
 //     return strtol(inodeStr, NULL, 10);
 // }
+
+/*
+    MAIN FUNCTIONS
+*/
 
 FDNode *getFD(int PID)
 {   

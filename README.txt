@@ -240,6 +240,14 @@
 	NOTE: hasPositional and argPID is passed in due to the positional argument requirement
 	      If a positional argument is entered, then this function will check whether or not the PID of the processNodes match the argPID before printing to the table
 
+	void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystemWide, int canPrintVNodes, int canPrintComposite, int hasThreshold, int thresholdNum, int hasPositional, int argPID, int hasOutputTXT, int hasOutputBIN)
+
+		This function takes in many variables, one of which stores the linked list of processNodes, as well as variables representing the flags passed in as command-line arguments
+
+		Explanation of Solution:
+			This function controls which tables and information are printed to the screen (and text/binary files) using the variables passed in
+			The value of these variables depend on whether or not its respective flag was encountered in argv in main()
+
 ### 3.5 main() Function
 
 	int main(int argc, char **argv)
