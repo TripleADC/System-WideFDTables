@@ -296,13 +296,13 @@ processNode *getPID()
     // Opening and traversing proc file
     DIR *procDir = opendir("/proc");
     struct dirent *currEntry = readdir(procDir);
-    struct stat currInfo;
+    struct stat currInfo; // ==> Gets the user ID of the process
 
     char path[STR_LEN] = "/proc/";
 
     // Since we only want processes owned by the current user
-    char *username = getlogin();
-    struct passwd *user = getpwnam(username);
+    char *username = getlogin(); // ==> Gets username of the user using the terminal, NOT user ID
+    struct passwd *user = getpwnam(username); // ==> Gets passwd struct (that contains user ID) using the username
 
     while(currEntry != NULL)
     {
@@ -439,11 +439,44 @@ void printVNodes(processNode *root, int hasPositional, int argPID)
 }
 
 // Composite/default => Prints PID, FD, Filename, Inode
-void printComposite(processNode *root, int hasPositional, int argPID)
+void printComposite(processNode *root, int hasPositional, int argPID, int hasOutputTXT, int hasOutputBIN)
 {
     processNode *processTraverser = root;
     FDNode *FDTraverser = NULL;
     int i = 0;
+    FILE *txtF = NULL;
+    FILE *binF = NULL;
+    char *binStr = NULL;
+
+    if(hasOutputTXT)
+    {
+        txtF = fopen("compositeTable.txt", "w");
+        
+        if(txtF == NULL)
+        {
+            printf("compositeTable.txt cannot be created or opened");
+            return;
+        }
+
+        fprintf(txtF, "\t PID \t FD \t File name \t\t Inode \n");
+        fprintf(txtF, "=============================================================================================\n");
+    }
+
+    if(hasOutputBIN)
+    {
+        binF = fopen("compositeTable.bin", "wb");
+
+        if(binF == NULL)
+        {
+            printf("compositeTable.bin cannot be created or opened");
+            return;
+        }
+
+        binStr = "\t PID \t FD \t File name \t\t Inode \n";
+        fwrite(binStr, sizeof(char), strlen(binStr), binF);
+        binStr = "=============================================================================================\n";
+        fwrite(binStr, sizeof(char), strlen(binStr), binF);
+    }
 
     printf("\t PID \t FD \t File name \t\t Inode \n");
     printf("=============================================================================================\n");
@@ -456,13 +489,49 @@ void printComposite(processNode *root, int hasPositional, int argPID)
             while(FDTraverser != NULL)
             {
                 printf("%d \t %d  %d \t %s \t %ld\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename, FDTraverser->inode);
+                
+                if(hasOutputTXT)
+                {
+                    fprintf(txtF, "%d \t %d  %d \t %s \t %ld\n", i, processTraverser->PID, FDTraverser->FD, FDTraverser->filename, FDTraverser->inode);
+                }
+                
+                if(hasOutputBIN)
+                {
+                    fwrite(&i, sizeof(int), 1, binF);
+                    binStr = " \t ";
+                    fwrite(binStr, sizeof(char), strlen(binStr), binF);
+                    fwrite(&processTraverser->PID, sizeof(int), 1, binF);
+                    binStr = " ";
+                    fwrite(binStr, sizeof(char), strlen(binStr), binF);
+                    fwrite(&FDTraverser->FD, sizeof(int), 1, binF);
+                    binStr = " \t ";
+                    fwrite(binStr, sizeof(char), strlen(binStr), binF);
+                    binStr = FDTraverser->filename;
+                    fwrite(binStr, sizeof(char), strlen(binStr), binF);
+                    binStr = " \t ";
+                    fwrite(&FDTraverser->inode, sizeof(long), 1, binF);
+                    binStr = "\n";
+                    fwrite(binStr, sizeof(char), strlen(binStr), binF);
+                }
+
                 FDTraverser = FDTraverser->next;
                 i++;
+
             }
         }
         
         processTraverser = processTraverser->next;
         i++;
+    }
+
+    if(hasOutputTXT)
+    {
+        fclose(txtF);
+    }
+
+    if(hasOutputBIN)
+    {
+        fclose(binF);
     }
 }
 
@@ -489,7 +558,7 @@ void printThresholdList(processNode *root, int thresholdNum, int hasPositional, 
 }
 
 // Prints to screen depending on flag
-void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystemWide, int canPrintVNodes, int canPrintComposite, int hasThreshold, int thresholdNum, int hasPositional, int argPID)
+void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystemWide, int canPrintVNodes, int canPrintComposite, int hasThreshold, int thresholdNum, int hasPositional, int argPID, int hasOutputTXT, int hasOutputBIN)
 {
     system("clear");
 
@@ -513,7 +582,7 @@ void printToScreen(processNode *root, int canPrintPerProcess, int canPrintSystem
 
     if(canPrintComposite)
     {
-        printComposite(root, hasPositional, argPID);
+        printComposite(root, hasPositional, argPID, hasOutputTXT, hasOutputBIN);
         printf("\n\n");
     }
 
@@ -542,6 +611,9 @@ int main(int argc, char **argv)
     int hasPositional = 0;
     int argPID = -1;
 
+    int hasOutputTXT = 0;
+    int hasOutputBIN = 0;
+
     int numOfNumberArgs = 0;
     int produceError = 0;
 
@@ -555,7 +627,7 @@ int main(int argc, char **argv)
     if(argc == 1)
     {
         // By default, prints composite table
-        printToScreen(root, 0, 0, 0, 1, 0, -1, 0, -1);
+        printToScreen(root, 0, 0, 0, 1, 0, -1, 0, -1, 0, 0);
     }
     else
     {
@@ -603,6 +675,14 @@ int main(int argc, char **argv)
                         break;
                     }
                 }
+                else if(strcmp(argv[i], "--output_TXT") == 0)
+                {
+                    hasOutputTXT = 1;
+                }
+                else if(strcmp(argv[i], "--output_binary") == 0)
+                {
+                    hasOutputBIN = 1;
+                }
                 // Checking if valid flag
                 else
                 {
@@ -633,7 +713,7 @@ int main(int argc, char **argv)
                 canPrintComposite = 0;
             }
 
-            printToScreen(root, canPrintPerProcess, canPrintSystemWide, canPrintVNodes, canPrintComposite, hasThreshold, thresholdNum, hasPositional, argPID);
+            printToScreen(root, canPrintPerProcess, canPrintSystemWide, canPrintVNodes, canPrintComposite, hasThreshold, thresholdNum, hasPositional, argPID, hasOutputTXT, hasOutputBIN);
         }
         else
         {

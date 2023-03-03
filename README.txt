@@ -60,6 +60,14 @@
 			Sets the threshold number to X
 			At the end of printing tables, it will print PID's and FD's of all the processes owned by the user whose FD number surpasses the threshold number
 
+		--output_TXT
+
+			Produces a text file called "compositeTable.txt" that stores the composite table in it in plaintext
+
+		--output_binary
+
+			Produces a binary file called "compositeTable.bin" that stores the composite table in it in binary text
+
 	NOTE: Each respective table can be outputted in succession by inputting multiple flags
 
 	Valid Commands Example
@@ -211,6 +219,9 @@
 		Explanation of Solution:
 			This function prints out the PID, File Descriptor number, File Descriptor name, and inode number in a table by traversing the linked list of processNodes
 			This is because the linked list of processNodes has all the information we need by how I designed the CDT
+
+			If the user uses --output_TXT or --output_BIN, then this function is also responsible for creating and writing the contents of
+			the composite table onto their respective files
 	
 	void printThresholdList(processNode *root, int thresholdNum, int hasPositional, int argPID)
 
